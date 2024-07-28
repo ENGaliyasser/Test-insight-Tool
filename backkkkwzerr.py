@@ -1,35 +1,22 @@
-import sys
+import sys  # Required for accessing command-line arguments and exiting the application
+from PyQt5.QtCore import QThread, pyqtSignal, QObject, QMutex, QMutexLocker  # PyQt5 modules for threading and signals
+from PyQt5.QtGui import QTextCursor  # PyQt5 module for handling text cursor in text widgets
+from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog, QMessageBox  # PyQt5 modules for creating the GUI
+import os  # Required for file and directory operations
+import time  # Required for sleep operations in threading
+from selenium import webdriver  # Required for web scraping with Selenium
+from selenium.webdriver.chrome.options import Options  # Required for headless browser options
+from selenium.webdriver.common.by import By  # Required for locating elements in the web page
+from openpyxl import Workbook  # Required for creating and manipulating Excel workbooks
+from openpyxl.utils import get_column_letter  # Required for column letter conversion in Excel
+from openpyxl.styles import Font  # Required for styling Excel cells
+from gui import Ui_MainWindow  # Importing the UI design
 
-from PyQt5.QtCore import QThread, pyqtSignal, QObject, QMutex, QMutexLocker
-from PyQt5.QtGui import QTextCursor
-from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog, QMessageBox
-import os
-import time
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from openpyxl import Workbook
-from openpyxl.utils import get_column_letter
-from openpyxl.styles import Font
-from gui import Ui_MainWindow
-
+# Global variable to track the progress value
 progress_value = 0
 
-class SharedData(QObject):
-    def __init__(self):
-        super().__init__()
-        self._value = None
-        self._lock = QMutex()
-
-    def set_value(self, value):
-        with QMutexLocker(self._lock):
-            self._value = value
-
-    def get_value(self):
-        with QMutexLocker(self._lock):
-            return self._value
-
 class TaskThread(QThread):
+    # Signals to communicate between threads and the main GUI
     progress = pyqtSignal(int)
     update_summary = pyqtSignal(list)
     finished = pyqtSignal()
@@ -42,6 +29,9 @@ class TaskThread(QThread):
         self.total_files = 0
 
     def run(self):
+        """
+        Main function for the thread. Handles progress bar updates or file extraction based on index.
+        """
         try:
             if self.index == 1:  # Progress Bar Update
                 global progress_value
@@ -107,9 +97,18 @@ class TaskThread(QThread):
             self.finished.emit()
 
     def get_html_files(self, folder):
+        """
+        Get a list of HTML files in the given folder.
+        :param folder: The directory path to search for HTML files.
+        :return: List of HTML file names.
+        """
         return [f for f in os.listdir(folder) if f.endswith('.html')]
 
     def create_workbook_with_headers(self):
+        """
+        Create an Excel workbook with headers for test results.
+        :return: Tuple containing workbook and worksheet.
+        """
         wb = Workbook()
         ws = wb.active
         ws.title = "Test Results"
@@ -123,18 +122,39 @@ class TaskThread(QThread):
         return wb, ws
 
     def append_test_steps(self, ws, rows, test_no):
+        """
+        Append test steps to the worksheet.
+        :param ws: The worksheet to append data to.
+        :param rows: List of rows from the HTML table.
+        :param test_no: Current test number.
+        """
         for row in rows[:-1]:
             cols = row.find_elements(By.TAG_NAME, 'td')
             ws.append([test_no] + [col.text for col in cols[:]] + [""])
 
     def extract_overall_result(self, rows):
+        """
+        Extract the overall result from the last row of the table.
+        :param rows: List of rows from the HTML table.
+        :return: The overall result string.
+        """
         return rows[-1].find_element(By.TAG_NAME, 'p').text.split(':')[1].strip()
 
     def append_overall_result(self, ws, overall_result, test_no):
+        """
+        Append the overall result to the last column of the last row in the worksheet.
+        :param ws: The worksheet to append data to.
+        :param overall_result: The overall result string.
+        :param test_no: Current test number.
+        """
         last_row = ws.max_row
         ws.cell(row=last_row, column=7, value=overall_result)
 
     def adjust_column_widths(self, ws):
+        """
+        Adjust the column widths in the worksheet based on the maximum length of cell content.
+        :param ws: The worksheet to adjust column widths for.
+        """
         for col in ws.columns:
             max_length = 0
             column = col[0].column_letter
@@ -148,6 +168,11 @@ class TaskThread(QThread):
             ws.column_dimensions[column].width = adjusted_width
 
     def save_workbook(self, wb, folder):
+        """
+        Save the workbook to the given folder with the filename 'result.xlsx'.
+        :param wb: The workbook to save.
+        :param folder: The directory path to save the workbook in.
+        """
         wb.save(os.path.join(folder, "result.xlsx"))
 
 class Back_End_Class(QMainWindow, Ui_MainWindow):
@@ -161,6 +186,9 @@ class Back_End_Class(QMainWindow, Ui_MainWindow):
         self.task_thread = None
 
     def browse_folder(self):
+        """
+        Open a dialog to select a folder and display the selected folder path in the line edit.
+        """
         folder = QFileDialog.getExistingDirectory(self, "Select Folder")
         if folder:
             if not os.listdir(folder):  # Check if the folder is empty
@@ -169,6 +197,9 @@ class Back_End_Class(QMainWindow, Ui_MainWindow):
                 self.browse_line.setText(folder)
 
     def start_extraction(self):
+        """
+        Start the extraction process by initializing and starting the progress and extraction threads.
+        """
         folder = self.browse_line.text()
         if not os.path.isdir(folder):
             self.show_error_message("Wrong Path.")
@@ -192,12 +223,23 @@ class Back_End_Class(QMainWindow, Ui_MainWindow):
         self.task_thread.start()
 
     def update_progress_bar(self, value):
+        """
+        Update the progress bar with the given value.
+        :param value: Progress value to set.
+        """
         self.progressBar.setValue(value)
 
     def on_extraction_finished(self):
+        """
+        Display a message when the extraction and processing are completed.
+        """
         self.textBrowser.append("Extraction and processing completed.")
 
     def display_summary(self, summary):
+        """
+        Display the summary of tests in the text browser.
+        :param summary: List of summary lines to display.
+        """
         self.textBrowser.clear()
         self.textBrowser.append(f"Number of tests: {self.task_thread.total_files}")
         for line in summary:
@@ -205,9 +247,18 @@ class Back_End_Class(QMainWindow, Ui_MainWindow):
             self.textBrowser.moveCursor(QTextCursor.End)
 
     def get_html_files(self, folder):
+        """
+        Get a list of HTML files in the given folder.
+        :param folder: The directory path to search for HTML files.
+        :return: List of HTML file names.
+        """
         return [f for f in os.listdir(folder) if f.endswith('.html')]
 
     def show_error_message(self, message):
+        """
+        Show an error message box with the given message.
+        :param message: The error message to display.
+        """
         QMessageBox.warning(self, "Error", message)
 
 if __name__ == "__main__":
