@@ -33,20 +33,7 @@ class TaskThread(QThread):
         Main function for the thread. Handles progress bar updates or file extraction based on index.
         """
         try:
-            if self.index == 1:  # Progress Bar Update
-                global progress_value
-                progress_value = 0
-                last_value = -1
-                while True:
-                    if progress_value != last_value:
-                        self.progress.emit(progress_value)
-                        last_value = progress_value
-
-                    if progress_value >= 100:
-                        break
-                    time.sleep(0.01)  # Check every 0.01 seconds
-
-            elif self.index == 2:  # File Extraction
+            if self.index == 1:  # File Extraction
                 if not self.folder:
                     self.error.emit("Folder path is not set.")
                     self.finished.emit()
@@ -200,6 +187,7 @@ class Back_End_Class(QMainWindow, Ui_MainWindow):
         """
         Start the extraction process by initializing and starting the progress and extraction threads.
         """
+        self.extract.setEnabled(False)
         folder = self.browse_line.text()
         if not os.path.isdir(folder):
             self.show_error_message("Wrong Path.")
@@ -210,14 +198,12 @@ class Back_End_Class(QMainWindow, Ui_MainWindow):
             self.show_error_message("No HTML files found in the selected folder.")
             return
 
-        # Start the progress thread
-        self.progress_thread = TaskThread(index=1, folder=folder)
-        self.progress_thread.progress.connect(self.update_progress_bar)
-        self.progress_thread.start()
+
 
         # Start the extraction thread
-        self.task_thread = TaskThread(index=2, folder=folder)
+        self.task_thread = TaskThread(index=1, folder=folder)
         self.task_thread.update_summary.connect(self.display_summary)
+        self.task_thread.progress.connect(self.update_progress_bar)
         self.task_thread.finished.connect(self.on_extraction_finished)
         self.task_thread.error.connect(self.show_error_message)
         self.task_thread.start()
@@ -234,6 +220,8 @@ class Back_End_Class(QMainWindow, Ui_MainWindow):
         Display a message when the extraction and processing are completed.
         """
         self.textBrowser.append("Extraction and processing completed.")
+        self.extract.setEnabled(True)
+
 
     def display_summary(self, summary):
         """
